@@ -1,98 +1,733 @@
-import React, { useState } from 'react';
-import { 
-  Box, Container, Typography, Tabs, Tab, 
-  Paper, Stack, Chip, Button, Divider, Avatar 
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Box,
+  Container,
+  Typography,
+  Tabs,
+  Tab,
+  Paper,
+  Stack,
+  Chip,
+  Button,
+  Avatar,
+  Menu,
+  MenuItem,
+  CircularProgress,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField
 } from '@mui/material';
-import { Engineering, AssignmentReturn, Timer, CheckCircle, Chat } from '@mui/icons-material';
+import {
+  Engineering,
+  AssignmentReturn,
+  WhatsApp,
+  AccessTime,
+  LocationOn,
+  Add
+} from '@mui/icons-material';
 import SideBar from '../components/Layout/SideBar';
 
-// Mock Data for the Lifecycle
-const MOCK_REPAIRS = [
-  { id: 1, type: 'incoming', item: 'Solar Inverter', client: 'John Doe', status: 'Pending', date: '2026-02-10' },
-  { id: 2, type: 'incoming', item: 'Water Pump', client: 'Jane Smith', status: 'In Progress', date: '2026-02-08' },
-  { id: 3, type: 'outgoing', item: 'Laptop Battery', artisan: 'TechFix Thika', status: 'Completed', date: '2026-02-05' },
-];
+const API_BASE = 'http://127.0.0.1:5000';
 
 const Maintenance = () => {
   const [tabValue, setTabValue] = useState(0);
+  const [repairs, setRepairs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
-  const getStatusColor = (status) => {
-    if (status === 'Completed') return 'success';
-    if (status === 'In Progress') return 'warning';
-    return 'error';
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [activeRepairId, setActiveRepairId] = useState(null);
+
+  const [openCreateDialog, setOpenCreateDialog] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  const [currentUser, setCurrentUser] = useState({
+    id: null,
+    username: 'Guest',
+    email: '',
+    phone_number: ''
+  });
+
+  const [form, setForm] = useState({
+    item: '',
+    description: '',
+    location: '',
+    artisan_id: ''
+  });
+
+  const token = localStorage.getItem('token');
+
+  const loadCurrentUser = useCallback(async () => {
+    if (!token) {
+      setCurrentUser({
+        id: null,
+        username: 'Guest',
+        email: '',
+        phone_number: ''
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load profile');
+      }
+
+      const userData = {
+        id: data.id,
+        username: data.username,
+        email: data.email,
+        phone_number: data.phone_number || ''
+      };
+
+      setCurrentUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+    } catch (error) {
+      console.error('Load profile error:', error);
+
+      try {
+        const savedUser = JSON.parse(localStorage.getItem('user'));
+        if (savedUser) {
+          setCurrentUser({
+            id: savedUser.id ?? null,
+            username: savedUser.username || 'Guest',
+            email: savedUser.email || '',
+            phone_number: savedUser.phone_number || ''
+          });
+        }
+      } catch {
+        setCurrentUser({
+          id: null,
+          username: 'Guest',
+          email: '',
+          phone_number: ''
+        });
+      }
+    }
+  }, [token]);
+
+  const fetchRepairs = useCallback(async () => {
+    if (!token) {
+      setRepairs([]);
+      setLoading(false);
+      setPageError('You are not logged in.');
+      return;
+    }
+
+    setLoading(true);
+    setPageError('');
+
+    try {
+      const response = await fetch(`${API_BASE}/maintenance`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      let data = [];
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Backend did not return valid JSON.');
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || `Failed with status ${response.status}`);
+      }
+
+      setRepairs(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Fetch maintenance error:', err);
+      setRepairs([]);
+      setPageError(err.message || 'Failed to fetch maintenance tasks');
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadCurrentUser();
+    fetchRepairs();
+  }, [loadCurrentUser, fetchRepairs]);
+
+  const handleUpdateClick = (event, id) => {
+    setAnchorEl(event.currentTarget);
+    setActiveRepairId(id);
   };
 
-  return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f5f7fa' }}>
-      <SideBar isLoggedIn={true} />
-      
-      <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, md: 4 }, mt: 2 }}>
-        <Container maxWidth="lg">
-          <Typography variant="h4" fontWeight={800} sx={{ mb: 1 }}>Maintenance Hub</Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-            Track the technical lifecycle of your repairs and service requests.
-          </Typography>
+  const handleCloseMenu = () => {
+    setAnchorEl(null);
+    setActiveRepairId(null);
+  };
 
-          <Paper sx={{ borderRadius: 4, overflow: 'hidden' }}>
-            <Tabs 
-              value={tabValue} 
-              onChange={(e, val) => setTabValue(val)} 
-              variant="fullWidth"
-              indicatorColor="primary"
-              textColor="primary"
+  const updateStatus = async (newStatus) => {
+    if (!activeRepairId || !token) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/maintenance/${activeRepairId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Backend did not return valid JSON.');
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || 'Failed to update status');
+      }
+
+      setSuccessMessage(`Status updated to "${newStatus}"`);
+      handleCloseMenu();
+      fetchRepairs();
+    } catch (err) {
+      console.error('Update status error:', err);
+      setPageError(err.message || 'Network error during update');
+      handleCloseMenu();
+    }
+  };
+
+  const handleOpenCreateDialog = () => {
+    setSuccessMessage('');
+    setPageError('');
+    setOpenCreateDialog(true);
+  };
+
+  const handleCloseCreateDialog = () => {
+    if (creating) return;
+    setOpenCreateDialog(false);
+    setForm({
+      item: '',
+      description: '',
+      location: '',
+      artisan_id: ''
+    });
+  };
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const submitMaintenanceRequest = async () => {
+    if (!token) {
+      setPageError('You are not logged in.');
+      return;
+    }
+
+    if (!form.item.trim()) {
+      setPageError('Item is required.');
+      return;
+    }
+
+    if (!form.artisan_id.trim()) {
+      setPageError('Artisan ID is required.');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      setPageError('');
+      setSuccessMessage('');
+
+      const response = await fetch(`${API_BASE}/maintenance`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          item: form.item.trim(),
+          description: form.description.trim(),
+          location: form.location.trim(),
+          artisan_id: Number(form.artisan_id)
+        })
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Backend did not return valid JSON.');
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || 'Failed to create maintenance request');
+      }
+
+      setSuccessMessage('Maintenance request created successfully.');
+      setOpenCreateDialog(false);
+      setForm({
+        item: '',
+        description: '',
+        location: '',
+        artisan_id: ''
+      });
+      setTabValue(1);
+      fetchRepairs();
+    } catch (err) {
+      console.error('Create maintenance error:', err);
+      setPageError(err.message || 'Failed to create maintenance request');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const getWhatsAppLink = (phone, item) => {
+    const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
+    if (!cleanPhone) return '#';
+
+    const message = encodeURIComponent(
+      `Hello, I'm contacting you regarding the maintenance of: ${item}`
+    );
+
+    return `https://wa.me/${cleanPhone}?text=${message}`;
+  };
+
+  const getStatusStyles = (status) => {
+    switch (status) {
+      case 'Completed':
+        return {
+          color: '#4caf50',
+          bg: 'rgba(76, 175, 80, 0.12)',
+          border: 'rgba(76, 175, 80, 0.35)'
+        };
+      case 'In Progress':
+        return {
+          color: '#ff9800',
+          bg: 'rgba(255, 152, 0, 0.12)',
+          border: 'rgba(255, 152, 0, 0.35)'
+        };
+      default:
+        return {
+          color: '#f44336',
+          bg: 'rgba(244, 67, 54, 0.12)',
+          border: 'rgba(244, 67, 54, 0.35)'
+        };
+    }
+  };
+
+  const incomingTasks = useMemo(() => {
+    return repairs.filter(
+      (repair) => Number(repair.artisan_id) === Number(currentUser.id)
+    );
+  }, [repairs, currentUser.id]);
+
+  const outgoingTasks = useMemo(() => {
+    return repairs.filter(
+      (repair) => Number(repair.client_id) === Number(currentUser.id)
+    );
+  }, [repairs, currentUser.id]);
+
+  const visibleRepairs = tabValue === 0 ? incomingTasks : outgoingTasks;
+
+  return (
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#0a1929' }}>
+      <SideBar isLoggedIn={true} />
+
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: { xs: 2, md: 4 },
+          mt: 2,
+          color: 'white'
+        }}
+      >
+        <Container maxWidth="lg">
+          <Box
+            sx={{
+              mb: 4,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: { xs: 'flex-start', md: 'center' },
+              flexDirection: { xs: 'column', md: 'row' },
+              gap: 2
+            }}
+          >
+            <Box>
+              <Typography variant="h4" fontWeight={900} sx={{ mb: 1 }}>
+                Maintenance Hub
+              </Typography>
+              <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.6)' }}>
+                Logged in as{' '}
+                <strong style={{ color: '#3399ff' }}>
+                  {currentUser.username || 'Guest'}
+                </strong>
+              </Typography>
+            </Box>
+
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={handleOpenCreateDialog}
+              sx={{
+                fontWeight: 700,
+                borderRadius: 2,
+                textTransform: 'none'
+              }}
             >
-              <Tab icon={<Engineering />} label="Incoming Tasks" sx={{ fontWeight: 700 }} />
-              <Tab icon={<AssignmentReturn />} label="My Outgoing Items" sx={{ fontWeight: 700 }} />
+              New Request
+            </Button>
+          </Box>
+
+          {pageError && (
+            <Alert
+              severity="error"
+              sx={{
+                mb: 2,
+                bgcolor: 'rgba(211, 47, 47, 0.12)',
+                color: '#fff',
+                border: '1px solid rgba(244,67,54,0.3)',
+                '& .MuiAlert-icon': { color: '#ff6b6b' }
+              }}
+            >
+              {pageError}
+            </Alert>
+          )}
+
+          {successMessage && (
+            <Alert
+              severity="success"
+              sx={{
+                mb: 3,
+                bgcolor: 'rgba(46, 125, 50, 0.12)',
+                color: '#fff',
+                border: '1px solid rgba(76,175,80,0.3)',
+                '& .MuiAlert-icon': { color: '#81c784' }
+              }}
+            >
+              {successMessage}
+            </Alert>
+          )}
+
+          <Paper
+            sx={{
+              borderRadius: 4,
+              overflow: 'hidden',
+              bgcolor: '#132f4c',
+              border: '1px solid rgba(255,255,255,0.05)'
+            }}
+          >
+            <Tabs
+              value={tabValue}
+              onChange={(e, val) => setTabValue(val)}
+              variant="fullWidth"
+              sx={{
+                bgcolor: '#173a5e',
+                '& .MuiTab-root': {
+                  color: 'rgba(255,255,255,0.5)',
+                  fontWeight: 700
+                },
+                '& .Mui-selected': {
+                  color: '#3399ff !important'
+                },
+                '& .MuiTabs-indicator': {
+                  bgcolor: '#3399ff'
+                }
+              }}
+            >
+              <Tab
+                icon={<Engineering />}
+                label={`INCOMING TASKS (${incomingTasks.length})`}
+              />
+              <Tab
+                icon={<AssignmentReturn />}
+                label={`OUTGOING REQUESTS (${outgoingTasks.length})`}
+              />
             </Tabs>
 
             <Box sx={{ p: 3 }}>
-              {MOCK_REPAIRS
-                .filter(r => tabValue === 0 ? r.type === 'incoming' : r.type === 'outgoing')
-                .map((repair) => (
-                  <Paper 
-                    key={repair.id} 
-                    variant="outlined" 
-                    sx={{ p: 2, mb: 2, borderRadius: 3, '&:hover': { borderColor: 'primary.main' } }}
-                  >
-                    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="center" spacing={2}>
-                      <Stack direction="row" spacing={2} alignItems="center">
-                        <Avatar sx={{ bgcolor: 'primary.main' }}>
-                          {repair.item[0]}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="subtitle1" fontWeight={700}>{repair.item}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {tabValue === 0 ? `From: ${repair.client}` : `Artisan: ${repair.artisan}`} • {repair.date}
-                          </Typography>
-                        </Box>
-                      </Stack>
+              {loading ? (
+                <Box display="flex" justifyContent="center" p={4}>
+                  <CircularProgress />
+                </Box>
+              ) : visibleRepairs.length > 0 ? (
+                visibleRepairs.map((repair) => {
+                  const statusStyles = getStatusStyles(repair.status);
 
-                      <Stack direction="row" spacing={2} alignItems="center">
-                        <Chip 
-                          label={repair.status} 
-                          color={getStatusColor(repair.status)} 
-                          size="small" 
-                          icon={repair.status === 'Completed' ? <CheckCircle /> : <Timer />}
-                          sx={{ fontWeight: 700 }}
-                        />
-                        <Divider orientation="vertical" flexItem />
-                        <Button startIcon={<Chat />} size="small" variant="text">Discuss</Button>
-                        <Button variant="outlined" size="small">Update Status</Button>
+                  return (
+                    <Paper
+                      key={repair.id}
+                      elevation={0}
+                      sx={{
+                        p: 2.5,
+                        mb: 2,
+                        borderRadius: 3,
+                        bgcolor: 'rgba(10, 25, 41, 0.7)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        '&:hover': { border: '1px solid #3399ff' }
+                      }}
+                    >
+                      <Stack
+                        direction={{ xs: 'column', md: 'row' }}
+                        justifyContent="space-between"
+                        alignItems={{ xs: 'flex-start', md: 'center' }}
+                        spacing={2}
+                      >
+                        <Stack direction="row" spacing={2} alignItems="center">
+                          <Avatar
+                            sx={{
+                              bgcolor: '#007fff',
+                              width: 48,
+                              height: 48,
+                              fontWeight: 800
+                            }}
+                          >
+                            {repair.item ? repair.item[0].toUpperCase() : 'M'}
+                          </Avatar>
+
+                          <Box>
+                            <Typography variant="subtitle1" fontWeight={700}>
+                              {repair.item}
+                            </Typography>
+
+                            {!!repair.description && (
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  color: 'rgba(255,255,255,0.65)',
+                                  mt: 0.5
+                                }}
+                              >
+                                {repair.description}
+                              </Typography>
+                            )}
+
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              alignItems="center"
+                              flexWrap="wrap"
+                              useFlexGap
+                              sx={{ mt: 1 }}
+                            >
+                              <Typography
+                                variant="caption"
+                                sx={{ color: 'rgba(255,255,255,0.5)' }}
+                              >
+                                {tabValue === 0
+                                  ? `From: ${repair.client || 'Unknown Client'}`
+                                  : `Assigned to: ${repair.artisan || `Artisan #${repair.artisan_id}`}`}
+                              </Typography>
+
+                              <Box
+                                sx={{
+                                  width: 4,
+                                  height: 4,
+                                  borderRadius: '50%',
+                                  bgcolor: 'rgba(255,255,255,0.2)'
+                                }}
+                              />
+
+                              <Stack direction="row" spacing={0.5} alignItems="center">
+                                <AccessTime sx={{ fontSize: 12, color: '#3399ff' }} />
+                                <Typography
+                                  variant="caption"
+                                  sx={{ color: '#3399ff', fontWeight: 600 }}
+                                >
+                                  {repair.status === 'Completed' ? 'Closed' : 'Active'}
+                                </Typography>
+                              </Stack>
+
+                              {!!repair.location && (
+                                <>
+                                  <Box
+                                    sx={{
+                                      width: 4,
+                                      height: 4,
+                                      borderRadius: '50%',
+                                      bgcolor: 'rgba(255,255,255,0.2)'
+                                    }}
+                                  />
+                                  <Stack direction="row" spacing={0.5} alignItems="center">
+                                    <LocationOn sx={{ fontSize: 12, color: '#3399ff' }} />
+                                    <Typography
+                                      variant="caption"
+                                      sx={{ color: 'rgba(255,255,255,0.6)' }}
+                                    >
+                                      {repair.location}
+                                    </Typography>
+                                  </Stack>
+                                </>
+                              )}
+                            </Stack>
+                          </Box>
+                        </Stack>
+
+                        <Stack
+                          direction={{ xs: 'column', sm: 'row' }}
+                          spacing={1.5}
+                          alignItems={{ xs: 'stretch', sm: 'center' }}
+                          sx={{ width: { xs: '100%', md: 'auto' } }}
+                        >
+                          <Chip
+                            label={repair.status}
+                            size="small"
+                            sx={{
+                              bgcolor: statusStyles.bg,
+                              color: statusStyles.color,
+                              fontWeight: 800,
+                              border: `1px solid ${statusStyles.border}`
+                            }}
+                          />
+
+                          <Button
+                            startIcon={<WhatsApp />}
+                            href={repair.phone ? getWhatsAppLink(repair.phone, repair.item) : undefined}
+                            target="_blank"
+                            disabled={!repair.phone}
+                            size="small"
+                            sx={{
+                              color: repair.phone ? '#3399ff' : 'rgba(255,255,255,0.3)',
+                              textTransform: 'none',
+                              fontWeight: 700
+                            }}
+                          >
+                            {repair.phone ? 'Discuss' : 'No Contact'}
+                          </Button>
+
+                          {tabValue === 0 && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={(e) => handleUpdateClick(e, repair.id)}
+                              sx={{
+                                color: 'white',
+                                borderColor: 'rgba(255,255,255,0.2)',
+                                textTransform: 'none',
+                                '&:hover': {
+                                  borderColor: '#3399ff',
+                                  color: '#3399ff'
+                                }
+                              }}
+                            >
+                              Update Status
+                            </Button>
+                          )}
+                        </Stack>
                       </Stack>
-                    </Stack>
-                  </Paper>
-                ))}
-              
-              {/* Empty State */}
-              {MOCK_REPAIRS.filter(r => tabValue === 0 ? r.type === 'incoming' : r.type === 'outgoing').length === 0 && (
-                <Box textAlign="center" sx={{ py: 10 }}>
-                  <Typography color="text.secondary">No active maintenance logs found.</Typography>
+                    </Paper>
+                  );
+                })
+              ) : (
+                <Box textAlign="center" py={5}>
+                  <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.35)' }}>
+                    {tabValue === 0
+                      ? 'No incoming maintenance tasks found.'
+                      : 'No outgoing maintenance requests found.'}
+                  </Typography>
                 </Box>
               )}
             </Box>
           </Paper>
         </Container>
       </Box>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleCloseMenu}
+        PaperProps={{
+          sx: {
+            bgcolor: '#173a5e',
+            color: 'white',
+            border: '1px solid rgba(255,255,255,0.1)',
+            '& .MuiMenuItem-root:hover': {
+              bgcolor: 'rgba(51, 153, 255, 0.2)'
+            }
+          }
+        }}
+      >
+        <MenuItem onClick={() => updateStatus('Pending')}>Pending</MenuItem>
+        <MenuItem onClick={() => updateStatus('In Progress')}>In Progress</MenuItem>
+        <MenuItem onClick={() => updateStatus('Completed')}>Completed</MenuItem>
+      </Menu>
+
+      <Dialog
+        open={openCreateDialog}
+        onClose={handleCloseCreateDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Create Maintenance Request</DialogTitle>
+
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Item"
+              name="item"
+              value={form.item}
+              onChange={handleFormChange}
+              fullWidth
+            />
+
+            <TextField
+              label="Description"
+              name="description"
+              value={form.description}
+              onChange={handleFormChange}
+              multiline
+              minRows={3}
+              fullWidth
+            />
+
+            <TextField
+              label="Location"
+              name="location"
+              value={form.location}
+              onChange={handleFormChange}
+              fullWidth
+            />
+
+            <TextField
+              label="Artisan ID"
+              name="artisan_id"
+              value={form.artisan_id}
+              onChange={handleFormChange}
+              type="number"
+              fullWidth
+              helperText="Enter the user ID of the artisan receiving this request"
+            />
+          </Stack>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={handleCloseCreateDialog} disabled={creating}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={submitMaintenanceRequest}
+            disabled={creating}
+          >
+            {creating ? 'Sending...' : 'Send Request'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

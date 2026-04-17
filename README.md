@@ -1,194 +1,24 @@
-🚀 TalaLink – Full Stack Marketplace & Service Platform
-📌 Overview
-
-TalaLink is a full-stack web application that combines:
-
-🛒 E-commerce marketplace
-🛠️ Maintenance/service request system
-💬 Real-time-style user communication (chat)
-👨‍💼 Admin management dashboard
-
-It enables users to buy/sell products, request services, and communicate directly, all in one platform.
-
-🧠 Core Concept
-
-TalaLink bridges two worlds:
-
-Product Marketplace
-Users list and sell items
-Buyers browse, add to cart, and place orders
-Service Marketplace
-Users request maintenance/services
-Service providers respond and communicate
-
-👉 Think: E-commerce + Freelancer services + Chat system combined
-
-🏗️ Tech Stack
-🔹 Frontend
-⚛️ React (Vite)
-🎨 Material UI (MUI)
-🌍 React Router
-📡 Axios (API communication)
-🗺️ Leaflet / Google Maps (location features)
-📊 Recharts (analytics/dashboard)
-🔹 Backend
-🐍 Python (Flask)
-🗄️ SQLAlchemy (ORM)
-🔐 JWT Authentication
-🔑 Bcrypt (password hashing)
-📧 Email verification system
-📁 File uploads (images)
-🔹 Database
-SQLite (development)
-Easily upgradable to PostgreSQL/MySQL
-📁 Project Structure
-Talalink/
-│
-├── client/                  # React frontend
+🚀 TalaLink – Full Stack Marketplace & Service PlatformTalaLink is a comprehensive full-stack web application that bridges the gap between product commerce and professional maintenance services. It provides a unified ecosystem where users can buy/sell items, book service providers, and communicate in real-time.🧠 Core ConceptTalaLink functions as a hybrid platform:Product Marketplace: A classic e-commerce experience where users list and sell items.Service Marketplace: A platform for users to request maintenance and professional services.Integrated Communication: A dedicated chat system that connects buyers, sellers, and service providers directly within the app.🛠️ Tech StackFrontendReact (Vite): Core library for building the user interface.Material UI (MUI): Professional styling and component library.React Router: For seamless client-side navigation.Axios: API communication with the backend.Leaflet / Google Maps: Integrated location-based features.Recharts: Interactive data visualization for dashboards.Backend & DatabasePython (Flask): Robust backend framework.SQLAlchemy: ORM for database management.JWT & Bcrypt: Secure authentication and password hashing.SQLite: Default development database (upgradable to PostgreSQL/MySQL).👤 User Roles👥 Regular UsersMarketplace: Create listings, browse products, manage carts, and place orders.Maintenance: Request specific services and track job progress.Social: Real-time chat with other users regarding listings or orders.👨‍💼 AdminStatistics: View platform-wide analytics and activity.Management: Oversee users, listings, and platform moderation.📁 Project StructurePlaintextTalalink/
+├── client/                 # React frontend (Vite)
 │   ├── src/
-│   │   ├── pages/           # App pages
-│   │   ├── components/      # Reusable UI components
-│   │   ├── App.jsx          # Main routing
-│   │   └── main.jsx         # Entry point
-│
-├── server/                  # Flask backend
-│   ├── app.py               # Main backend logic (routes + models)
-│   ├── models.py            # (Optional/partial models)
-│   ├── migrations/          # DB migrations
-│   ├── instance/            # DB file
-│   └── static/uploads/      # Uploaded images
-│
-├── package.json
-└── README.md
-👤 User Roles
-👥 Regular Users
-Sign up / login
-Create listings
-Browse products
-Add to cart
-Place orders
-Request maintenance services
-Chat with other users
-👨‍💼 Admin
-View platform statistics
-Manage users
-Manage listings
-Monitor activity
-🔑 Features
-🔐 Authentication
-User signup & login
-Password hashing (bcrypt)
-JWT-based sessions
-Email verification
-🛒 Marketplace
-Create product listings
-Browse products
-Product details page
-Cart system
-Order system
-🛠️ Maintenance System
-Request services
-Track maintenance jobs
-Connect with service providers
-💬 Chat System
-User-to-user messaging
-Conversations tied to:
-Orders
-Listings
-Maintenance requests
-📊 Admin Dashboard
-Total users
-Listings count
-Orders tracking
-Chat/message analytics
-🌐 Application Flow
-🧭 User Journey
-User signs up → verifies email
-Logs in → receives JWT token
-Can:
-Create listings
-Browse products
-Add to cart → checkout
-Request maintenance
-Chat with other users
-Track orders/services
-🔌 API Overview
-🔑 Auth
-POST /signup
-POST /login
-GET  /verify/<token>
-👤 User
-GET  /profile
-PUT  /profile
-GET  /users (admin)
-🛒 Listings
-GET  /listings
-POST /listings
-GET  /listings/<id>
-🧰 Maintenance
-GET  /maintenance
-POST /maintenance
-🛍️ Cart & Orders
-GET  /cart
-POST /cart
-POST /orders
-GET  /orders
-💬 Chat
-GET  /chats
-POST /chats
-GET  /messages
-POST /messages
-📊 Admin
-GET /admin/stats
-GET /admin/listings
-GET /admin/users
-⚙️ Installation Guide
-🔹 1. Clone the repo
-git clone https://github.com/v1c7o0r/Talalink.git
+│   │   ├── pages/          # Full-page views
+│   │   ├── components/     # Reusable UI elements
+│   │   ├── App.jsx         # Main routing logic
+│   │   └── main.jsx        # App entry point
+├── server/                 # Flask backend
+│   ├── app.py              # Main routes and logic
+│   ├── models.py           # Database schemas
+│   ├── migrations/         # DB version control
+│   ├── instance/           # Local database storage
+│   └── static/uploads/     # User-uploaded images
+🔌 API Overview (Key Endpoints)CategoryEndpointMethodDescriptionAuth/signup, /loginPOSTUser registration and JWT session start.Market/listingsGET/POSTFetch or create product listings.Service/maintenanceGET/POSTRequest and track service jobs.Orders/orders, /cartGET/POSTManage shopping cart and final purchases.Chat/chats, /messagesGET/POSTUser-to-user communication.Admin/admin/statsGETView system analytics.⚙️ Installation Guide1. Clone the RepositoryBashgit clone https://github.com/v1c7o0r/Talalink.git
 cd Talalink
-🔹 2. Backend Setup
-cd server
-
-# Create virtual environment
+2. Backend SetupBashcd server
 python -m venv venv
-source venv/bin/activate  # Linux/macOS
-venv\Scripts\activate     # Windows
-
-# Install dependencies
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# Run server
 python app.py
-🔹 3. Frontend Setup
-cd client
-
+3. Frontend SetupBashcd client
 npm install
 npm run dev
-🧪 Testing
-
-You can use:
-
-🧪 Pytest (backend API tests)
-📮 Postman (manual API testing)
-⚛️ React testing tools (frontend)
-⚠️ Known Issues / Improvements
-Backend is currently monolithic (app.py)
-Should be split into:
-routes/
-models/
-services/
-node_modules/ and venv/ should not be in repo ❌
-→ Add .gitignore
-No role-based middleware separation yet
-Chat can be upgraded to real-time (WebSockets)
-🚀 Future Improvements
-🔄 Real-time chat (Socket.IO)
-💳 Payment integration (Stripe/M-Pesa)
-📍 Better location filtering
-🧠 Recommendation system
-📦 Microservices architecture
-🤝 Contribution
-Fork repo
-Create feature branch
-Commit changes
-Push & open PR
+🚀 Future RoadmapReal-time Engine: Upgrade chat to WebSockets (Socket.IO).Payments: Integration with Stripe and M-Pesa.Refactoring: Transition from a monolithic app.py to a modular architecture (routes/models/services).Intelligence: Implement a personalized recommendation system.🤝 ContributionContributions are welcome! Please fork the repository, create a feature branch, and submit a Pull Request.

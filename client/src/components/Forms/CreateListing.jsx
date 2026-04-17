@@ -24,8 +24,12 @@ import {
   Link as LinkIcon,
   DeleteForever,
   Save,
+  Build,
+  ShoppingBag,
 } from "@mui/icons-material";
 import { useNavigate, useParams } from "react-router-dom";
+
+const API_BASE = "http://127.0.0.1:5000";
 
 const CreateListing = () => {
   const navigate = useNavigate();
@@ -35,6 +39,7 @@ const CreateListing = () => {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(isEditMode);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [imageMode, setImageMode] = useState("url");
   const [selectedFile, setSelectedFile] = useState(null);
 
@@ -53,7 +58,7 @@ const CreateListing = () => {
 
     const fetchItem = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/listings/${id}`);
+        const response = await fetch(`${API_BASE}/listings/${id}`);
         if (!response.ok) throw new Error("Failed to fetch item");
 
         const data = await response.json();
@@ -67,8 +72,7 @@ const CreateListing = () => {
           location: data.location || "Thika Town",
           phone_number: data.phone_number || "",
         });
-      // eslint-disable-next-line no-unused-vars
-      } catch (err) {
+      } catch {
         setError("Could not fetch item details. Ensure the server is online.");
       } finally {
         setFetching(false);
@@ -85,30 +89,53 @@ const CreateListing = () => {
     }));
   };
 
+  const validateForm = () => {
+    if (!formData.title.trim()) return "Listing title is required.";
+    if (!formData.description.trim()) return "Description is required.";
+    if (!formData.price || Number(formData.price) <= 0) return "Price must be greater than 0.";
+    if (!formData.category.trim()) return "Category is required.";
+    if (!formData.location.trim()) return "Location is required.";
+    if (!formData.phone_number.trim()) return "WhatsApp number is required.";
+
+    if (imageMode === "url" && formData.image_url && !/^https?:\/\//i.test(formData.image_url)) {
+      return "Image URL must start with http:// or https://";
+    }
+
+    return "";
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccess("");
+
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      setLoading(false);
+      return;
+    }
 
     const token = localStorage.getItem("token");
     const data = new FormData();
 
-    data.append("title", formData.title);
-    data.append("description", formData.description);
+    data.append("title", formData.title.trim());
+    data.append("description", formData.description.trim());
     data.append("price", formData.price);
     data.append("category", formData.category);
-    data.append("location", formData.location);
-    data.append("phone_number", formData.phone_number);
+    data.append("location", formData.location.trim());
+    data.append("phone_number", formData.phone_number.trim());
 
     if (imageMode === "file" && selectedFile) {
       data.append("file", selectedFile);
     } else {
-      data.append("image_url", formData.image_url);
+      data.append("image_url", formData.image_url.trim());
     }
 
     const url = isEditMode
-      ? `http://localhost:5000/listings/${id}`
-      : "http://localhost:5000/listings";
+      ? `${API_BASE}/listings/${id}`
+      : `${API_BASE}/listings`;
 
     const method = isEditMode ? "PUT" : "POST";
 
@@ -124,12 +151,12 @@ const CreateListing = () => {
       const result = await response.json();
 
       if (response.ok) {
-        navigate("/home");
+        setSuccess(isEditMode ? "Listing updated successfully." : "Listing published successfully.");
+        setTimeout(() => navigate("/home"), 1000);
       } else {
         setError(result.error || "The operation failed. Please check your inputs.");
       }
-    // eslint-disable-next-line no-unused-vars
-    } catch (err) {
+    } catch {
       setError("Connection error. Is the Flask server running on port 5000?");
     } finally {
       setLoading(false);
@@ -143,9 +170,10 @@ const CreateListing = () => {
 
     setLoading(true);
     setError("");
+    setSuccess("");
 
     try {
-      const response = await fetch(`http://localhost:5000/listings/${id}`, {
+      const response = await fetch(`${API_BASE}/listings/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -153,12 +181,12 @@ const CreateListing = () => {
       });
 
       if (response.ok) {
-        navigate("/home");
+        setSuccess("Listing deleted successfully.");
+        setTimeout(() => navigate("/home"), 800);
       } else {
         setError("Failed to delete item.");
       }
-    // eslint-disable-next-line no-unused-vars
-    } catch (err) {
+    } catch {
       setError("Could not connect to the server.");
     } finally {
       setLoading(false);
@@ -180,6 +208,11 @@ const CreateListing = () => {
       </Box>
     );
   }
+
+  const isService = formData.category === "Service";
+  const priceValue = Number(formData.price || 0);
+  const maintenanceFee = Number((priceValue * 0.05).toFixed(2));
+  const estimatedMaintenanceTotal = Number((priceValue + maintenanceFee).toFixed(2));
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#0a1929", pt: 12, pb: 6 }}>
@@ -203,9 +236,19 @@ const CreateListing = () => {
             {isEditMode ? "Update Your Listing" : "Share a New Item"}
           </Typography>
 
+          <Typography variant="body2" sx={{ mb: 3, color: "rgba(255,255,255,0.72)" }}>
+            Product listings can be bought directly or added to cart. Service listings create maintenance requests with a 5% maintenance fee added on the backend.
+          </Typography>
+
           {error && (
             <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
               {error}
+            </Alert>
+          )}
+
+          {success && (
+            <Alert severity="success" sx={{ mb: 3, borderRadius: 2 }}>
+              {success}
             </Alert>
           )}
 
@@ -217,9 +260,20 @@ const CreateListing = () => {
                 name="category"
                 value={formData.category}
                 onChange={handleChange}
+                fullWidth
               >
-                <MenuItem value="Product">Product (Physical Good)</MenuItem>
-                <MenuItem value="Service">Service (Technical Repair)</MenuItem>
+                <MenuItem value="Product">
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <ShoppingBag fontSize="small" />
+                    <span>Product (Physical Good)</span>
+                  </Stack>
+                </MenuItem>
+                <MenuItem value="Service">
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Build fontSize="small" />
+                    <span>Service (Technical Repair)</span>
+                  </Stack>
+                </MenuItem>
               </TextField>
 
               <TextField
@@ -256,6 +310,30 @@ const CreateListing = () => {
                   ),
                 }}
               />
+
+              {isService && (
+                <Paper
+                  sx={{
+                    p: 2,
+                    bgcolor: "#173a5e",
+                    borderRadius: 3,
+                    border: "1px solid rgba(51, 153, 255, 0.2)",
+                  }}
+                >
+                  <Typography variant="subtitle2" fontWeight={800} sx={{ color: "#90caf9", mb: 1 }}>
+                    Maintenance Pricing Preview
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.8)" }}>
+                    Item Price: KES {priceValue.toLocaleString()}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.8)" }}>
+                    Maintenance Fee (5%): KES {maintenanceFee.toLocaleString()}
+                  </Typography>
+                  <Typography variant="body1" sx={{ color: "#fff", fontWeight: 800, mt: 1 }}>
+                    Estimated Total: KES {estimatedMaintenanceTotal.toLocaleString()}
+                  </Typography>
+                </Paper>
+              )}
 
               <TextField
                 label="Detailed Description"

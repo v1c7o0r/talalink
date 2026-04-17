@@ -71,7 +71,7 @@ const Login = ({ setUser }) => {
         username: data.user.username || '',
         email: data.user.email || '',
         phone_number: data.user.phone_number || '',
-        role: data.user.role || ''
+        role: data.user.role || 'user'
       };
 
       localStorage.setItem('token', data.token);
@@ -81,7 +81,11 @@ const Login = ({ setUser }) => {
         setUser(normalizedUser);
       }
 
-      navigate('/home');
+      if (normalizedUser.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/home');
+      }
     } catch (err) {
       setError(err.message || 'Could not connect to the server. Is the Flask app running?');
     } finally {

@@ -1,6 +1,5 @@
-import { useState } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box } from '@mui/material';
+import { useState } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 // Page & Component Imports
 import Landing from "./pages/Landing";
@@ -9,72 +8,194 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
 import Maintenance from "./pages/Maintenance";
+import AdminDashboard from "./pages/AdminDashboard";
 import CreateListing from "./components/Forms/CreateListing";
 import ProductDetail from "./pages/ProductDetail";
-import VerifyEmail from "./pages/VerifyEmail"; // <--- ADD THIS IMPORT
+import VerifyEmail from "./pages/VerifyEmail";
 import Footer from "./components/Layout/Footer";
+import ProfilePage from "./pages/ProfilePage";
+import CartPage from "./pages/Cart";
+import OrdersPage from "./pages/Orders";
+import ChatPage from "./pages/Chat";
+
+/**
+ * Protected route wrapper
+ */
+function ProtectedRoute({ isAuthenticated, children }) {
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
+}
+
+/**
+ * Admin-only route wrapper
+ */
+function AdminRoute({ isAuthenticated, isAdmin, children }) {
+  return isAuthenticated && isAdmin ? children : <Navigate to="/" replace />;
+}
 
 /**
  * Main Application Component
  */
 export default function App() {
-  // 'user' data check - keeping your existing logic
-  const [user, setUser] = useState(null); 
+  const [user, setUser] = useState(() => {
+    const storedUser = localStorage.getItem("user");
+    return storedUser ? JSON.parse(storedUser) : null;
+  });
+
   const location = useLocation();
 
-  // Added verify and product to hidden footer routes for a cleaner look
-  const hideFooterRoutes = ['/dashboard', '/maintenance', '/chat', '/create-listing', '/verify'];
-  const shouldShowFooter = !hideFooterRoutes.some(path => location.pathname.startsWith(path));
+  const hideFooterRoutes = [
+    "/dashboard",
+    "/maintenance",
+    "/admin",
+    "/listings",
+    "/users",
+    "/chat",
+    "/create-listing",
+    "/verify",
+    "/profile",
+    "/cart",
+    "/orders",
+  ];
 
-  // Helper to check if a token exists in local storage even if 'user' state is reset
-  const isAuthenticated = user || localStorage.getItem('token');
+  const shouldShowFooter = !hideFooterRoutes.some((path) =>
+    location.pathname.startsWith(path)
+  );
+
+  const token = localStorage.getItem("token");
+  const storedUser = user || JSON.parse(localStorage.getItem("user") || "null");
+
+  const isAuthenticated = !!token;
+  const isAdmin =
+    storedUser?.role === "admin" || storedUser?.is_admin === true;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <Box component="main" sx={{ flex: 1 }}>
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <main style={{ flex: 1 }}>
         <Routes>
-          {/* --- PUBLIC ROUTES --- */}
+          {/* PUBLIC ROUTES */}
           <Route path="/" element={<Landing />} />
           <Route path="/home" element={<Home />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/login" element={<Login setUser={setUser} />} />
           <Route path="/product/:id" element={<ProductDetail />} />
-          
-          {/* Email Verification Link from Backend */}
           <Route path="/verify/:token" element={<VerifyEmail />} />
 
-          {/* --- PROTECTED ROUTES --- */}
-          {/* Redirect to login if not authenticated */}
-          
-          <Route 
-            path="/dashboard" 
-            element={isAuthenticated ? <Dashboard user={user} /> : <Navigate to="/login" />} 
-          />
-          
-          <Route 
-            path="/maintenance" 
-            element={isAuthenticated ? <Maintenance user={user} /> : <Navigate to="/login" />} 
+          {/* PROTECTED ROUTES */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <Dashboard user={storedUser} />
+              </ProtectedRoute>
+            }
           />
 
-          {/* CREATE ROUTE: For new listings */}
-          <Route 
-            path="/create-listing" 
-            element={isAuthenticated ? <CreateListing /> : <Navigate to="/login" />} 
+          <Route
+            path="/maintenance"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <Maintenance user={storedUser} />
+              </ProtectedRoute>
+            }
           />
 
-          {/* UPDATE ROUTE: For editing existing listings via ID */}
-          <Route 
-            path="/create-listing/:id" 
-            element={isAuthenticated ? <CreateListing /> : <Navigate to="/login" />} 
+          <Route
+            path="/create-listing"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <CreateListing />
+              </ProtectedRoute>
+            }
           />
 
-          {/* --- FALLBACK --- */}
-          <Route path="*" element={<Navigate to="/" />} />
+          <Route
+            path="/create-listing/:id"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <CreateListing />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/cart"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <CartPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <OrdersPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <ChatPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ADMIN ROUTES */}
+          <Route
+            path="/admin"
+            element={
+              <AdminRoute isAuthenticated={isAuthenticated} isAdmin={isAdmin}>
+                <AdminDashboard />
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="/admin/listings"
+            element={
+              <AdminRoute isAuthenticated={isAuthenticated} isAdmin={isAdmin}>
+                <AdminDashboard />
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="/admin/maintenance"
+            element={
+              <AdminRoute isAuthenticated={isAuthenticated} isAdmin={isAdmin}>
+                <AdminDashboard />
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="/admin/users"
+            element={
+              <AdminRoute isAuthenticated={isAuthenticated} isAdmin={isAdmin}>
+                <AdminDashboard />
+              </AdminRoute>
+            }
+          />
+
+          {/* FALLBACK */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </Box>
+      </main>
 
-      {/* Footer - Only shows on Landing, Home, and Login */}
       {shouldShowFooter && <Footer />}
-    </Box>
+    </div>
   );
 }

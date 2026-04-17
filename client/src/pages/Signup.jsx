@@ -81,13 +81,34 @@ const Signup = () => {
         throw new Error(data.error || 'Signup failed.');
       }
 
-      setSuccess('Account created successfully. Redirecting to login...');
+      const normalizedUser = {
+        id: data?.user?.id ?? null,
+        username: data?.user?.username || formData.username.trim(),
+        email: data?.user?.email || formData.email.trim(),
+        phone_number: data?.user?.phone_number || '',
+        role: data?.user?.role || 'user'
+      };
+
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+      }
+
+      localStorage.setItem('user', JSON.stringify(normalizedUser));
+
+      setSuccess('Account created successfully. Redirecting...');
 
       setTimeout(() => {
-        navigate('/login');
-      }, 1500);
+        if (normalizedUser.role === 'admin') {
+          navigate('/admin');
+        } else {
+          navigate('/home');
+        }
+      }, 1000);
     } catch (err) {
-      setError(err.message || 'Connection refused. Ensure the Flask server is running at port 5000.');
+      setError(
+        err.message || 'Connection refused. Ensure the Flask server is running at port 5000.'
+      );
     } finally {
       setLoading(false);
     }

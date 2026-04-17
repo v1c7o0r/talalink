@@ -26,13 +26,17 @@ import {
   WhatsApp,
   AccessTime,
   LocationOn,
-  Add
+  Add,
+  Chat
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import SideBar from '../components/Layout/SideBar';
 
 const API_BASE = 'http://127.0.0.1:5000';
 
 const Maintenance = () => {
+  const navigate = useNavigate();
+
   const [tabValue, setTabValue] = useState(0);
   const [repairs, setRepairs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,10 +60,46 @@ const Maintenance = () => {
     item: '',
     description: '',
     location: '',
-    artisan_id: ''
+    artisan_id: '',
+    listing_id: '',
+    phone: ''
   });
 
   const token = localStorage.getItem('token');
+
+  const normalizePhone = (phone) => {
+    const digits = String(phone || '').replace(/\D/g, '');
+
+    if (!digits) return '';
+
+    if (digits.startsWith('0') && digits.length === 10) {
+      return `254${digits.slice(1)}`;
+    }
+
+    if (digits.startsWith('254') && digits.length === 12) {
+      return digits;
+    }
+
+    if (digits.length >= 10 && digits.length <= 15) {
+      return digits;
+    }
+
+    return '';
+  };
+
+  const getWhatsAppLink = (phone, item) => {
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedPhone) {
+      return '';
+    }
+
+    const message = encodeURIComponent(
+      `Hello, I'm contacting you regarding the maintenance of: ${item || 'your listing'}`
+    );
+
+    return `https://wa.me/${normalizedPhone}?text=${message}`;
+  };
 
   const loadCurrentUser = useCallback(async () => {
     if (!token) {
@@ -106,15 +146,18 @@ const Maintenance = () => {
             email: savedUser.email || '',
             phone_number: savedUser.phone_number || ''
           });
+          return;
         }
-      } catch {
-        setCurrentUser({
-          id: null,
-          username: 'Guest',
-          email: '',
-          phone_number: ''
-        });
+      } catch (parseError) {
+        console.error('Saved user parse error:', parseError);
       }
+
+      setCurrentUser({
+        id: null,
+        username: 'Guest',
+        email: '',
+        phone_number: ''
+      });
     }
   }, [token]);
 
@@ -140,7 +183,8 @@ const Maintenance = () => {
       let data = [];
       try {
         data = await response.json();
-      } catch {
+      // eslint-disable-next-line no-unused-vars
+      } catch (error) {
         throw new Error('Backend did not return valid JSON.');
       }
 
@@ -148,7 +192,14 @@ const Maintenance = () => {
         throw new Error(data.error || data.message || `Failed with status ${response.status}`);
       }
 
-      setRepairs(Array.isArray(data) ? data : []);
+      const normalizedRepairs = Array.isArray(data)
+        ? data.map((repair) => ({
+            ...repair,
+            phone: normalizePhone(repair.phone)
+          }))
+        : [];
+
+      setRepairs(normalizedRepairs);
     } catch (err) {
       console.error('Fetch maintenance error:', err);
       setRepairs([]);
@@ -189,7 +240,8 @@ const Maintenance = () => {
       let data = {};
       try {
         data = await response.json();
-      } catch {
+      // eslint-disable-next-line no-unused-vars
+      } catch (error) {
         throw new Error('Backend did not return valid JSON.');
       }
 
@@ -198,6 +250,7 @@ const Maintenance = () => {
       }
 
       setSuccessMessage(`Status updated to "${newStatus}"`);
+      setPageError('');
       handleCloseMenu();
       fetchRepairs();
     } catch (err) {
@@ -215,17 +268,21 @@ const Maintenance = () => {
 
   const handleCloseCreateDialog = () => {
     if (creating) return;
+
     setOpenCreateDialog(false);
     setForm({
       item: '',
       description: '',
       location: '',
-      artisan_id: ''
+      artisan_id: '',
+      listing_id: '',
+      phone: ''
     });
   };
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
+
     setForm((prev) => ({
       ...prev,
       [name]: value
@@ -248,10 +305,21 @@ const Maintenance = () => {
       return;
     }
 
+    const normalizedManualPhone = normalizePhone(form.phone);
+
     try {
       setCreating(true);
       setPageError('');
       setSuccessMessage('');
+
+      const payload = {
+        item: form.item.trim(),
+        description: form.description.trim(),
+        location: form.location.trim(),
+        artisan_id: Number(form.artisan_id),
+        phone: normalizedManualPhone,
+        listing_id: form.listing_id.trim() ? Number(form.listing_id) : null
+      };
 
       const response = await fetch(`${API_BASE}/maintenance`, {
         method: 'POST',
@@ -259,18 +327,14 @@ const Maintenance = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({
-          item: form.item.trim(),
-          description: form.description.trim(),
-          location: form.location.trim(),
-          artisan_id: Number(form.artisan_id)
-        })
+        body: JSON.stringify(payload)
       });
 
       let data = {};
       try {
         data = await response.json();
-      } catch {
+      // eslint-disable-next-line no-unused-vars
+      } catch (error) {
         throw new Error('Backend did not return valid JSON.');
       }
 
@@ -284,7 +348,9 @@ const Maintenance = () => {
         item: '',
         description: '',
         location: '',
-        artisan_id: ''
+        artisan_id: '',
+        listing_id: '',
+        phone: ''
       });
       setTabValue(1);
       fetchRepairs();
@@ -296,15 +362,57 @@ const Maintenance = () => {
     }
   };
 
-  const getWhatsAppLink = (phone, item) => {
-    const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
-    if (!cleanPhone) return '#';
+  const createOrOpenChat = async (repair) => {
+    if (!token || !currentUser?.id) {
+      setPageError('You must be logged in to open chat.');
+      return;
+    }
 
-    const message = encodeURIComponent(
-      `Hello, I'm contacting you regarding the maintenance of: ${item}`
-    );
+    const otherUserId =
+      Number(currentUser.id) === Number(repair.client_id)
+        ? Number(repair.artisan_id)
+        : Number(repair.client_id);
 
-    return `https://wa.me/${cleanPhone}?text=${message}`;
+    if (!otherUserId) {
+      setPageError('Could not determine chat participant.');
+      return;
+    }
+
+    try {
+      setPageError('');
+      setSuccessMessage('');
+
+      const payload = {
+        buyer_id: Number(repair.client_id),
+        artisan_id: Number(repair.artisan_id),
+        maintenance_id: Number(repair.id)
+      };
+
+      const response = await fetch(`${API_BASE}/chats`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Backend did not return valid JSON.');
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || 'Failed to open chat');
+      }
+
+      navigate(`/chat?chatId=${data.id}`);
+    } catch (error) {
+      console.error('Open chat error:', error);
+      setPageError(error.message || 'Failed to open local chat');
+    }
   };
 
   const getStatusStyles = (status) => {
@@ -468,6 +576,12 @@ const Maintenance = () => {
               ) : visibleRepairs.length > 0 ? (
                 visibleRepairs.map((repair) => {
                   const statusStyles = getStatusStyles(repair.status);
+                  const whatsappLink = getWhatsAppLink(repair.phone, repair.item);
+                  const hasWhatsApp = Boolean(whatsappLink);
+                  const participantName =
+                    tabValue === 0
+                      ? repair.client || 'Unknown Client'
+                      : repair.artisan || `Artisan #${repair.artisan_id}`;
 
                   return (
                     <Paper
@@ -490,11 +604,17 @@ const Maintenance = () => {
                       >
                         <Stack direction="row" spacing={2} alignItems="center">
                           <Avatar
+                            onClick={() => createOrOpenChat(repair)}
                             sx={{
                               bgcolor: '#007fff',
                               width: 48,
                               height: 48,
-                              fontWeight: 800
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              '&:hover': {
+                                transform: 'scale(1.05)',
+                                boxShadow: '0 0 0 2px rgba(51,153,255,0.35)'
+                              }
                             }}
                           >
                             {repair.item ? repair.item[0].toUpperCase() : 'M'}
@@ -527,12 +647,21 @@ const Maintenance = () => {
                             >
                               <Typography
                                 variant="caption"
-                                sx={{ color: 'rgba(255,255,255,0.5)' }}
+                                onClick={() => createOrOpenChat(repair)}
+                                sx={{
+                                  color: '#66b2ff',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  '&:hover': {
+                                    textDecoration: 'underline'
+                                  }
+                                }}
                               >
-                                {tabValue === 0
-                                  ? `From: ${repair.client || 'Unknown Client'}`
-                                  : `Assigned to: ${repair.artisan || `Artisan #${repair.artisan_id}`}`}
+                                {tabValue === 0 ? 'From: ' : 'Assigned to: '}
+                                {participantName}
                               </Typography>
+
+                              <Chat sx={{ fontSize: 14, color: '#66b2ff' }} />
 
                               <Box
                                 sx={{
@@ -574,6 +703,25 @@ const Maintenance = () => {
                                   </Stack>
                                 </>
                               )}
+
+                              {!!repair.phone && (
+                                <>
+                                  <Box
+                                    sx={{
+                                      width: 4,
+                                      height: 4,
+                                      borderRadius: '50%',
+                                      bgcolor: 'rgba(255,255,255,0.2)'
+                                    }}
+                                  />
+                                  <Typography
+                                    variant="caption"
+                                    sx={{ color: 'rgba(255,255,255,0.55)' }}
+                                  >
+                                    WhatsApp: {repair.phone}
+                                  </Typography>
+                                </>
+                              )}
                             </Stack>
                           </Box>
                         </Stack>
@@ -597,17 +745,31 @@ const Maintenance = () => {
 
                           <Button
                             startIcon={<WhatsApp />}
-                            href={repair.phone ? getWhatsAppLink(repair.phone, repair.item) : undefined}
-                            target="_blank"
-                            disabled={!repair.phone}
+                            href={hasWhatsApp ? whatsappLink : undefined}
+                            target={hasWhatsApp ? '_blank' : undefined}
+                            rel={hasWhatsApp ? 'noopener noreferrer' : undefined}
+                            disabled={!hasWhatsApp}
                             size="small"
                             sx={{
-                              color: repair.phone ? '#3399ff' : 'rgba(255,255,255,0.3)',
+                              color: hasWhatsApp ? '#25D366' : 'rgba(255,255,255,0.3)',
                               textTransform: 'none',
                               fontWeight: 700
                             }}
                           >
-                            {repair.phone ? 'Discuss' : 'No Contact'}
+                            {hasWhatsApp ? 'Discuss on WhatsApp' : 'No WhatsApp Number'}
+                          </Button>
+
+                          <Button
+                            startIcon={<Chat />}
+                            onClick={() => createOrOpenChat(repair)}
+                            size="small"
+                            sx={{
+                              color: '#66b2ff',
+                              textTransform: 'none',
+                              fontWeight: 700
+                            }}
+                          >
+                            Chat Here
                           </Button>
 
                           {tabValue === 0 && (
@@ -683,6 +845,7 @@ const Maintenance = () => {
               value={form.item}
               onChange={handleFormChange}
               fullWidth
+              required
             />
 
             <TextField
@@ -710,7 +873,27 @@ const Maintenance = () => {
               onChange={handleFormChange}
               type="number"
               fullWidth
+              required
               helperText="Enter the user ID of the artisan receiving this request"
+            />
+
+            <TextField
+              label="Listing ID"
+              name="listing_id"
+              value={form.listing_id}
+              onChange={handleFormChange}
+              type="number"
+              fullWidth
+              helperText="Optional when creating manually, but recommended for correct phone resolution"
+            />
+
+            <TextField
+              label="WhatsApp Number"
+              name="phone"
+              value={form.phone}
+              onChange={handleFormChange}
+              fullWidth
+              helperText="Optional manual fallback. Use format like 0712345678 or 254712345678"
             />
           </Stack>
         </DialogContent>
